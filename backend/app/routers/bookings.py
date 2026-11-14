@@ -1,3 +1,4 @@
+import math
 import uuid
 from datetime import date, datetime, time
 
@@ -9,8 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.core.errors import ApiError, ok
 from app.db.session import get_db
-from app.models import Booking, Customer, Payment
+from app.models import Booking, Customer, Driver, Payment
 from app.schemas.bookings import (
+    AssignDriverRequest,
     BookingCreate,
     BookingOut,
     BookingStatus,
@@ -20,6 +22,7 @@ from app.schemas.bookings import (
 )
 from app.services.booking_service import (
     advance_split,
+    advance_split,
     assert_no_overlap,
     find_overlap,
     lock_car,
@@ -27,6 +30,7 @@ from app.services.booking_service import (
     recompute_booking_amounts,
 )
 from app.services.common import TZ, date_only, money, normalize_phone, today_local, to_local
+from app.services.settings_service import get_business_settings
 from app.services.db_utils import conflict_from_integrity, parse_uuid
 
 router = APIRouter(
@@ -119,6 +123,14 @@ def create_booking(payload: BookingCreate, db: Session = Depends(get_db)):
     if car is None:
         raise ApiError(404, "NOT_FOUND", "Car not found.")
 
+    driver = None
+    if payload.driver_id is not None:
+        driver = db.get(Driver, payload.driver_id)
+        if driver is None:
+            raise ApiError(404, "NOT_FOUND", "Driver not found.")
+        if driver.status != "available":
+            raise ApiError(400, "DRIVER_NOT_AVAILABLE", "Sirf available drivers assign ho sakte hain.")
+
     assert_no_overlap(db, car.id, pickup, return_at)
 
     customer = db.execute(
@@ -141,6 +153,9 @@ def create_booking(payload: BookingCreate, db: Session = Depends(get_db)):
         customer_phone=payload.customer_phone.strip(),
         car_id=car.id,
         car_name=car.name,
+        driver_id=driver.id if driver else None,
+        driver_name=driver.full_name if driver else None,
+        late_penalty_amount=0,
         pickup_datetime=pickup,
         return_datetime=return_at,
         driver_option=payload.driver_option,
@@ -160,6 +175,8 @@ def create_booking(payload: BookingCreate, db: Session = Depends(get_db)):
     try:
         db.add(booking)
         db.flush()
+        if driver is not None:
+            driver.status = "on_trip"
         if advance > 0:
             method, cash, bank = advance_split(payload.payment_plan, advance)
             db.add(
@@ -259,6 +276,10 @@ def cancel_booking(
     if booking.status == "completed":
         raise ApiError(400, "CANNOT_CANCEL", "A completed booking cannot be cancelled.")
     if booking.status != "cancelled":
+        if booking.driver_id is not None:
+            drv = db.get(Driver, booking.driver_id)
+            if drv is not None:
+                drv.status = "available"
         booking.status = "cancelled"
         reason = (payload.reason if payload else None) or ""
         if reason.strip():
@@ -276,9 +297,67 @@ def complete_booking(identifier: str, db: Session = Depends(get_db)):
     if booking.status == "cancelled":
         raise ApiError(400, "CANNOT_COMPLETE", "A cancelled booking cannot be completed.")
     if booking.status != "completed":
+        if booking.driver_id is not None:
+            drv = db.get(Driver, booking.driver_id)
+            if drv is not None:
+                drv.status = "available"
+
+        settings = get_business_settings(db)
+        now = datetime.now(TZ)
+        ms_late = (now - booking.return_datetime).total_seconds() * 1000
+        if settings.late_penalty_enabled and ms_late > 0:
+            hours_late = math.ceil(ms_late / 3600000)
+            penalty = hours_late * (settings.late_return_penalty_per_hour or 0)
+            booking.late_penalty_amount = money(penalty)
+            booking.balance_amount = money(booking.balance_amount) + money(penalty)
+            recompute_booking_amounts(booking)
+            note = f"Late penalty: PKR {penalty} ({hours_late} hours late)"
+            booking.notes = f"{booking.notes} · {note}".strip(" ·") if booking.notes else note
+
         booking.status = "completed"
         db.commit()
         db.refresh(booking)
+    return ok(BookingOut.model_validate(booking).model_dump(mode="json"))
+
+
+@router.post("/bookings/{booking_id}/assign-driver")
+def assign_driver(
+    booking_id: uuid.UUID,
+    payload: AssignDriverRequest,
+    db: Session = Depends(get_db),
+):
+    booking = db.execute(
+        select(Booking).where(Booking.id == booking_id).with_for_update()
+    ).scalar_one_or_none()
+    if booking is None:
+        raise ApiError(404, "NOT_FOUND", "Booking not found.")
+
+    if booking.driver_id is not None and booking.driver_id != payload.driver_id:
+        old = db.get(Driver, booking.driver_id)
+        if old is not None:
+            old.status = "available"
+
+    if payload.driver_id is None:
+        booking.driver_id = None
+        booking.driver_name = None
+        booking.driver_option = "self_drive"
+    else:
+        driver = db.get(Driver, payload.driver_id)
+        if driver is None:
+            raise ApiError(404, "NOT_FOUND", "Driver not found.")
+        if driver.status != "available" and driver.id != booking.driver_id:
+            raise ApiError(400, "DRIVER_NOT_AVAILABLE", "Sirf available drivers assign ho sakte hain.")
+        driver.status = "on_trip"
+        booking.driver_id = driver.id
+        booking.driver_name = driver.full_name
+        booking.driver_option = "with_driver"
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise conflict_from_integrity(exc) from exc
+    db.refresh(booking)
     return ok(BookingOut.model_validate(booking).model_dump(mode="json"))
 
 

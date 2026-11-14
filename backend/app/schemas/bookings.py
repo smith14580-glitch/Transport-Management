@@ -26,6 +26,8 @@ class BookingCreate(BaseModel):
     total_amount: float = Field(ge=0)
     advance_amount: float = Field(ge=0)
     payment_plan: PaymentPlan
+    driver_id: uuid.UUID | None = None
+    driver_name: str | None = None
     notes: str | None = None
 
 
@@ -43,6 +45,10 @@ class BookingUpdate(BaseModel):
 
 class CancelBookingRequest(BaseModel):
     reason: str | None = None
+
+
+class AssignDriverRequest(BaseModel):
+    driver_id: uuid.UUID | None = None
 
 
 class BookingOut(BaseModel):
@@ -68,5 +74,8 @@ class BookingOut(BaseModel):
     payment_plan: PaymentPlan
     payment_status: PaymentStatus
     status: BookingStatus
+    driver_id: uuid.UUID | None = None
+    driver_name: str | None = None
+    late_penalty_amount: float = 0
     notes: str | None = None
     created_at: datetime.datetime | None = None

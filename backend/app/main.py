@@ -17,6 +17,7 @@ from app.routers import (
     cars,
     customers,
     dashboard,
+    drivers,
     demo,
     payments,
     records,
@@ -118,5 +119,6 @@ app.include_router(cars.router)
 app.include_router(payments.router)
 app.include_router(records.router)
 app.include_router(customers.router)
+app.include_router(drivers.router)
 app.include_router(settings_router.router)
 app.include_router(demo.router)

@@ -22,6 +22,8 @@ DEFAULT_SETTINGS: dict[str, tuple[str, str]] = {
     "default_rate_with_driver_day": ("15000", "Default rate with driver — per day (PKR)"),
     "default_rate_self_hour": ("1500", "Default rate self drive — per hour (PKR)"),
     "default_rate_self_day": ("10000", "Default rate self drive — per day (PKR)"),
+    "late_return_penalty_per_hour": ("1000", "Late return penalty per hour (PKR)"),
+    "late_penalty_enabled": ("true", "Enable late return penalty"),
 }
 
 
@@ -62,6 +64,9 @@ def get_business_settings(db: Session) -> BusinessSettingsOut:
         default_rate_with_driver_day=_as_float(values.get("default_rate_with_driver_day", "0")),
         default_rate_self_hour=_as_float(values.get("default_rate_self_hour", "0")),
         default_rate_self_day=_as_float(values.get("default_rate_self_day", "0")),
+        late_return_penalty_per_hour=_as_float(values.get("late_return_penalty_per_hour", "1000")),
+        late_penalty_enabled=str(values.get("late_penalty_enabled", "true")).strip().lower()
+        in {"true", "1", "yes", "on"},
     )
 
 
@@ -84,6 +89,8 @@ def update_business_settings(
             continue
         if key == "phones":
             _upsert(db, key, json.dumps([str(item) for item in value]))
+        elif key == "late_penalty_enabled":
+            _upsert(db, key, "true" if bool(value) else "false")
         else:
             _upsert(db, key, str(value))
     db.flush()

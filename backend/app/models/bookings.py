@@ -65,6 +65,16 @@ class Booking(Base):
         index=True,
     )
     car_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("drivers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    driver_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    late_penalty_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=0
+    )
     pickup_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     return_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     driver_option: Mapped[str] = mapped_column(String(30), nullable=False)

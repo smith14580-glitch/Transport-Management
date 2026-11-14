@@ -11,6 +11,8 @@ class BusinessSettingsOut(BaseModel):
     default_rate_with_driver_day: float
     default_rate_self_hour: float
     default_rate_self_day: float
+    late_return_penalty_per_hour: float = 1000
+    late_penalty_enabled: bool = True
 
 
 class BusinessSettingsUpdate(BaseModel):
@@ -23,3 +25,5 @@ class BusinessSettingsUpdate(BaseModel):
     default_rate_with_driver_day: float | None = Field(default=None, ge=0)
     default_rate_self_hour: float | None = Field(default=None, ge=0)
     default_rate_self_day: float | None = Field(default=None, ge=0)
+    late_return_penalty_per_hour: float | None = Field(default=None, ge=0)
+    late_penalty_enabled: bool | None = None

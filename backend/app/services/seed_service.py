@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import hash_password
-from app.models import Booking, Car, Customer, Payment, SaleRecord, Setting, User
+from app.models import Booking, Car, Customer, Driver, Payment, SaleRecord, Setting, User
 from app.services.common import TZ, datetime_on, money, today_local
 from app.services.settings_service import DEFAULT_SETTINGS
 
@@ -46,6 +46,7 @@ def _clear_sample_data(db: Session) -> None:
     db.execute(delete(SaleRecord))
     db.execute(delete(Customer))
     db.execute(delete(Car))
+    db.execute(delete(Driver))
     db.execute(delete(Setting))
     db.flush()
 
@@ -100,6 +101,16 @@ def seed_database(db: Session, reset: bool = False) -> bool:
     db.add_all(customers)
     db.flush()
 
+    drivers = [
+        Driver(full_name="Kamran Ali (Sample)", age=34, date_of_birth=date(1990, 5, 12), cnic="42101-1234567-1", phone="0300-1234567", licence_no="KHI-12345", licence_expiry=today_local().replace(year=today_local().year + 1), address="Gulshan, Karachi", emergency_contact="0300-9998877", status="on_trip", notes="Sample driver", photo=None),
+        Driver(full_name="Imtiaz Hussain (Sample)", age=41, date_of_birth=date(1983, 9, 3), cnic="42201-7654321-2", phone="0321-7654321", licence_no="KHI-67890", licence_expiry=today_local() + timedelta(days=20), address="Korangi, Karachi", emergency_contact="0321-1112233", status="available", notes="Licence expiring soon (sample)", photo=None),
+        Driver(full_name="Nadeem Raza (Sample)", age=29, date_of_birth=date(1995, 11, 20), cnic="42301-1122334-3", phone="0333-1122334", licence_no="KHI-11223", licence_expiry=today_local().replace(year=today_local().year + 1), address="Malir, Karachi", emergency_contact="0333-4455667", status="available", notes="Sample driver", photo=None),
+        Driver(full_name="Salman Qureshi (Sample)", age=37, date_of_birth=date(1987, 2, 14), cnic="42401-9988776-4", phone="0345-9988776", licence_no="KHI-99887", licence_expiry=today_local() + timedelta(days=90), address="Defence, Karachi", emergency_contact="0345-2233445", status="off_duty", notes="On leave (sample)", photo=None),
+        Driver(full_name="Tariq Mehmood (Sample)", age=46, date_of_birth=date(1978, 7, 8), cnic="42501-5566778-5", phone="0312-5566778", licence_no="KHI-55667", licence_expiry=today_local() + timedelta(days=200), address="PECHS, Karachi", emergency_contact="0312-3344556", status="available", notes="Sample driver", photo=None),
+    ]
+    db.add_all(drivers)
+    db.flush()
+
     year = today_local().year
     booking_specs = [
         (0, 0, _dt(0, "09:00"), _dt(0, "21:00"), "with_driver", 1, "days", 30000, 30000, 15000, 15000, "half_now_half_later", "active", "Wedding guest pickup — airport run"),
@@ -149,6 +160,9 @@ def seed_database(db: Session, reset: bool = False) -> bool:
         )
         bookings.append(booking)
     db.add_all(bookings)
+    db.flush()
+    bookings[0].driver_id = drivers[0].id
+    bookings[0].driver_name = drivers[0].full_name
     db.flush()
 
     payment_specs = [
