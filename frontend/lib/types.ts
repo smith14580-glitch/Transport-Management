@@ -115,6 +115,26 @@ export interface Customer {
   created_at?: string;
 }
 
+export interface TripPosition {
+  booking_id: string;
+  booking_code: string;
+  lat: number;
+  lng: number;
+  speed: number | null;
+  recorded_at: string;
+}
+
+export interface LiveTrip {
+  booking_id: string;
+  booking_code: string;
+  customer_name: string;
+  car_name: string;
+  driver_name: string | null;
+  status: "live" | "stale" | "ended";
+  last_position: TripPosition | null;
+  positions: TripPosition[];
+}
+
 export interface Driver {
   id: string;
   full_name: string;
@@ -182,6 +202,7 @@ export interface StoreData {
   sales: SaleRecord[];
   customers: Customer[];
   drivers: Driver[];
+  trip_positions: TripPosition[];
   settings: BusinessSettings;
 }
 

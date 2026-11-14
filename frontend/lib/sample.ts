@@ -232,6 +232,7 @@ export function buildSeed(): StoreData {
     sales,
     customers,
     drivers,
+    trip_positions: [],
     settings,
   };
 }

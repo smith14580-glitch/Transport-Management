@@ -64,6 +64,7 @@ export default function BookingDetailPage() {
   const [editReturn, setEditReturn] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [reassignId, setReassignId] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -274,9 +275,22 @@ export default function BookingDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold text-charcoal">{t("driverAssigned")}:</span>
                 {booking.driver_id ? (
-                  <Link href={`/drivers/${booking.driver_id}`} className="font-semibold text-brand-dark underline">
-                    {booking.driver_name || t("noDriver")}
-                  </Link>
+                  <>
+                    {(() => {
+                      const drv = drivers.find((d) => d.id === booking.driver_id);
+                      return drv?.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={drv.photo} alt={drv.full_name} className="h-8 w-8 rounded-full object-cover ring-1 ring-stone-line" />
+                      ) : (
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-light text-xs font-bold text-brand-dark">
+                          {(booking.driver_name || "?").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
+                        </div>
+                      );
+                    })()}
+                    <Link href={`/drivers/${booking.driver_id}`} className="font-semibold text-brand-dark underline">
+                      {booking.driver_name || t("noDriver")}
+                    </Link>
+                  </>
                 ) : (
                   <span className="text-sm text-ink/60">{t("noDriver")}</span>
                 )}
@@ -357,6 +371,30 @@ export default function BookingDetailPage() {
                 Cancel Booking
               </button>
             )}
+            <button
+              type="button"
+              onClick={async () => {
+                const link = `${window.location.origin}/track/${booking.booking_code}`;
+                try {
+                  await navigator.clipboard.writeText(link);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                } catch {
+                  window.prompt("Copy this link:", link);
+                }
+              }}
+              className={secondaryButtonClass}
+            >
+              {copied ? t("copied") : t("shareTrackingLink")}
+            </button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`Track trip: ${window.location.origin}/track/${booking.booking_code}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={secondaryButtonClass}
+            >
+              {t("whatsappShare")}
+            </a>
           </div>
         </section>
 

@@ -3,10 +3,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertTriangle, Pencil } from "lucide-react";
-import { fetchDriver, fetchDriverTrips } from "@/lib/api";
+import { AlertTriangle, Camera, Pencil } from "lucide-react";
+import { fetchDriver, fetchDriverTrips, updateDriver } from "@/lib/api";
 import type { Booking, Driver } from "@/lib/types";
 import { formatDateTime, formatPKR } from "@/lib/format";
+import { useAuth } from "@/lib/auth";
 import { useLanguage } from "@/lib/i18n";
 import {
   Badge,
@@ -35,7 +36,9 @@ export default function DriverDetailPage() {
   const params = useParams();
   const id = String(params.id);
   const { t } = useLanguage();
+  const { canWrite } = useAuth();
   const [driver, setDriver] = useState<Driver | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [trips, setTrips] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -56,6 +59,42 @@ export default function DriverDetailPage() {
     const timer = setTimeout(() => void load(), 0);
     return () => clearTimeout(timer);
   }, [load]);
+
+  async function resizeImage(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const max = 256;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { resolve(String(reader.result || "")); return; }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.src = String(reader.result || "");
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handlePhotoUpload(file: File) {
+    if (!driver || !canWrite) return;
+    setUploading(true);
+    try {
+      const photo = await resizeImage(file);
+      const updated = await updateDriver(driver.id, { photo });
+      setDriver(updated);
+    } catch {
+      // ignore; could show notice
+    } finally {
+      setUploading(false);
+    }
+  }
 
   if (loading) return <LoadingState />;
   if (error) return <ConnectionError error={error} onRetry={() => void load()} />;
@@ -87,14 +126,30 @@ export default function DriverDetailPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="space-y-4 rounded-xl bg-white p-5 shadow-sm ring-1 ring-stone-line lg:col-span-2">
           <div className="flex items-start gap-4">
-            {driver.photo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={driver.photo} alt={driver.full_name} className="h-20 w-20 rounded-full object-cover ring-2 ring-stone-line" />
-            ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-brand-light text-2xl font-bold text-brand-dark">
-                {initials(driver.full_name)}
-              </div>
-            )}
+            <label className="group relative block h-20 w-20 cursor-pointer overflow-hidden rounded-full ring-2 ring-stone-line">
+              {driver.photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={driver.photo} alt={driver.full_name} className="h-20 w-20 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-brand-light text-2xl font-bold text-brand-dark">
+                  {initials(driver.full_name)}
+                </div>
+              )}
+              <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                <Camera className="h-5 w-5 text-white" />
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                className="absolute inset-0 cursor-pointer opacity-0"
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handlePhotoUpload(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={driver.status === "available" ? "green" : driver.status === "on_trip" ? "blue" : "grey"}>

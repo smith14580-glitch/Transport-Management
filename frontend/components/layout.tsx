@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -9,6 +9,7 @@ import {
   CarFront,
   History,
   IdCard,
+  MapPin,
   LayoutDashboard,
   LogIn,
   LogOut,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
+import { getStoredUser } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
 import { USE_DEMO_DATA } from "@/lib/api";
 
@@ -38,6 +40,7 @@ const NAV: NavItem[] = [
   { href: "/records/sales", labelKey: "salesRecords", icon: <ShoppingBag className="h-5 w-5" /> },
   { href: "/customers", labelKey: "customers", icon: <Users className="h-5 w-5" /> },
   { href: "/drivers", labelKey: "drivers", icon: <IdCard className="h-5 w-5" /> },
+  { href: "/tracking", labelKey: "tracking", icon: <MapPin className="h-5 w-5" /> },
   { href: "/settings", labelKey: "settings", icon: <Settings className="h-5 w-5" /> },
 ];
 
@@ -68,9 +71,16 @@ function LanguageToggle() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, demoMode } = useAuth();
+  const { user, logout } = useAuth();
   const { t } = useLanguage();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (pathname === "/login") return;
+    if (!getStoredUser()) {
+      router.replace("/login");
+    }
+  }, [pathname, router]);
 
   if (pathname === "/login") {
     return <>{children}</>;
@@ -200,14 +210,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {USE_DEMO_DATA && (
           <div className="bg-amber-400 px-4 py-2 text-center text-xs font-bold text-charcoal sm:text-sm" role="status">
             {t("demoBanner")}
-          </div>
-        )}
-        {demoMode && (
-          <div className="bg-sky-600 px-4 py-2 text-center text-xs font-semibold text-white sm:text-sm" role="status">
-            {t("demoViewBanner")}{" "}
-            <Link href="/login" className="underline">
-              {t("login")}
-            </Link>
           </div>
         )}
 

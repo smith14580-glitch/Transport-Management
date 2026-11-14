@@ -17,16 +17,20 @@ import type {
   CustomerSummary,
   DashboardSummary,
   Driver,
+  LiveTrip,
   Payment,
   PaymentMethod,
   SaleRecord,
   SettingItem,
+  TripPosition,
   User,
 } from "./types";
 import { DEMO_EMAIL, DEMO_PASSWORD } from "./types";
 import { addDaysISO, todayISO } from "./format";
 import {
   addPaymentRecord,
+  addTripPosition,
+  clearTripPositions,
   deleteCar as storeDeleteCar,
   findCustomerByPhone,
   loadStore,
@@ -820,6 +824,139 @@ export async function fetchSettingsList(): Promise<SettingItem[]> {
     { key: "default_rate_self_hour", value: String(s.default_rate_self_hour), description: "Default rate self drive — per hour (PKR)" },
     { key: "default_rate_self_day", value: String(s.default_rate_self_day), description: "Default rate self drive — per day (PKR)" },
   ];
+}
+
+// ---------- Tracking ----------
+export async function sendPosition(
+  bookingCode: string,
+  pos: { lat: number; lng: number; speed: number | null; recorded_at: string },
+): Promise<void> {
+  if (USE_DEMO_DATA) {
+    const store = loadStore();
+    const booking = store.bookings.find((b) => b.booking_code === bookingCode);
+    if (!booking) return demo(undefined);
+    addTripPosition({
+      booking_id: booking.id,
+      booking_code: bookingCode,
+      lat: pos.lat,
+      lng: pos.lng,
+      speed: pos.speed,
+      recorded_at: pos.recorded_at,
+    });
+    return demo(undefined);
+  }
+  try {
+    await apiFetch("/tracking/positions", { method: "POST", body: { booking_code: bookingCode, ...pos } });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      const store = loadStore();
+      const booking = store.bookings.find((b) => b.booking_code === bookingCode);
+      if (booking) {
+        addTripPosition({
+          booking_id: booking.id,
+          booking_code: bookingCode,
+          lat: pos.lat,
+          lng: pos.lng,
+          speed: pos.speed,
+          recorded_at: pos.recorded_at,
+        });
+      }
+    } else {
+      throw e;
+    }
+  }
+  return;
+}
+
+async function demoLiveTrips(): Promise<LiveTrip[]> {
+  const store = loadStore();
+  const now = Date.now();
+  const active = store.bookings.filter((b) => b.status === "active");
+  const trips: LiveTrip[] = active.map((b, i) => {
+    const t = now / 1000;
+    const baseLat = 24.95 + i * 0.01;
+    const baseLng = 67.03 + i * 0.01;
+    const lat = baseLat + Math.sin(t / 30 + i) * 0.005;
+    const lng = baseLng + Math.cos(t / 30 + i) * 0.005;
+    const pos: TripPosition = {
+      booking_id: b.id,
+      booking_code: b.booking_code,
+      lat,
+      lng,
+      speed: 25 + (i * 7) % 20,
+      recorded_at: new Date(now).toISOString(),
+    };
+    const positions = store.trip_positions.filter((p) => p.booking_id === b.id);
+    const last = positions.length ? positions[positions.length - 1] : pos;
+    const stale = Date.now() - new Date(last.recorded_at).getTime() > 120000;
+    return {
+      booking_id: b.id,
+      booking_code: b.booking_code,
+      customer_name: b.customer_name,
+      car_name: b.car_name,
+      driver_name: b.driver_name || null,
+      status: stale ? "stale" : "live",
+      last_position: last,
+      positions: positions.length ? positions : [pos],
+    };
+  });
+  return trips;
+}
+
+export async function fetchLiveTrips(): Promise<LiveTrip[]> {
+  if (USE_DEMO_DATA) {
+    return demo(await demoLiveTrips());
+  }
+  try {
+    return asArray<LiveTrip>(await apiFetch<unknown>("/tracking/live"));
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      return demo(await demoLiveTrips());
+    }
+    throw e;
+  }
+}
+
+export async function fetchTripPositions(bookingId: string): Promise<TripPosition[]> {
+  if (USE_DEMO_DATA) {
+    return demo(loadStore().trip_positions.filter((p) => p.booking_id === bookingId));
+  }
+  try {
+    return asArray<TripPosition>(await apiFetch<unknown>(`/tracking/trips/${bookingId}`));
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      return demo(loadStore().trip_positions.filter((p) => p.booking_id === bookingId));
+    }
+    throw e;
+  }
+}
+
+export async function startTrip(bookingCode: string): Promise<void> {
+  if (USE_DEMO_DATA) return demo(undefined);
+  try {
+    const b = await fetchBooking(bookingCode);
+    await apiFetch(`/tracking/trips/${b.id}/start`, { method: "POST", body: {} });
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 404) throw e;
+  }
+  return;
+}
+
+export async function endTrip(bookingCode: string): Promise<void> {
+  if (USE_DEMO_DATA) {
+    const booking = loadStore().bookings.find((b) => b.booking_code === bookingCode);
+    if (booking) clearTripPositions(booking.id);
+    return demo(undefined);
+  }
+  try {
+    const b = await fetchBooking(bookingCode);
+    await apiFetch(`/tracking/trips/${b.id}/end`, { method: "POST", body: {} });
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 404) throw e;
+    const booking = loadStore().bookings.find((b) => b.booking_code === bookingCode);
+    if (booking) clearTripPositions(booking.id);
+  }
+  return;
 }
 
 // ---------- Demo data ----------

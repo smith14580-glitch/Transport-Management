@@ -2,8 +2,8 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
-import { deleteDriver, fetchDrivers } from "@/lib/api";
+import { Camera, Plus, Search } from "lucide-react";
+import { deleteDriver, fetchDrivers, updateDriver } from "@/lib/api";
 import type { Driver } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { useLanguage } from "@/lib/i18n";
@@ -45,6 +45,7 @@ export default function DriversPage() {
   const [error, setError] = useState<unknown>(null);
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -85,6 +86,43 @@ export default function DriversPage() {
       d.licence_no.toLowerCase().includes(q)
     );
   });
+
+  async function resizeImage(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const max = 256;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { resolve(String(reader.result || "")); return; }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.src = String(reader.result || "");
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handlePhotoUpload(d: Driver, file: File) {
+    if (!canWrite) { setNotice("Demo View me kuch save nahi hota — pehle login karo."); return; }
+    setUploadingId(d.id);
+    try {
+      const photo = await resizeImage(file);
+      await updateDriver(d.id, { photo });
+      setNotice("");
+      await load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Photo upload nahi ho saki.");
+    } finally {
+      setUploadingId(null);
+    }
+  }
 
   async function doDelete(d: Driver) {
     if (!guardWrite()) return;
@@ -139,14 +177,30 @@ export default function DriversPage() {
           {filtered.map((d) => (
             <article key={d.id} className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-stone-line">
               <div className="flex items-start gap-3">
-                {d.photo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={d.photo} alt={d.full_name} className="h-12 w-12 rounded-full object-cover ring-1 ring-stone-line" />
-                ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-sm font-bold text-brand-dark">
-                    {initials(d.full_name)}
-                  </div>
-                )}
+                <label className="group relative block h-12 w-12 cursor-pointer overflow-hidden rounded-full ring-1 ring-stone-line">
+                  {d.photo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={d.photo} alt={d.full_name} className="h-12 w-12 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-light text-sm font-bold text-brand-dark">
+                      {initials(d.full_name)}
+                    </div>
+                  )}
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Camera className="h-4 w-4 text-white" />
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                    disabled={uploadingId === d.id}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handlePhotoUpload(d, f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate font-display text-lg font-bold text-charcoal">{d.full_name}</h2>
                   <p className="text-xs text-ink/60">{t("age")}: {d.age} · {d.phone}</p>

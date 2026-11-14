@@ -12,6 +12,7 @@ import type {
   Payment,
   SaleRecord,
   StoreData,
+  TripPosition,
 } from "./types";
 
 export const STORE_KEY = "hktransport_store_v1";
@@ -32,6 +33,9 @@ export function loadStore(): StoreData {
         if (parsed && Array.isArray(parsed.cars)) {
           if (!Array.isArray(parsed.drivers)) {
             parsed.drivers = buildSeed().drivers;
+          }
+          if (!Array.isArray(parsed.trip_positions)) {
+            parsed.trip_positions = [];
           }
           if (!parsed.settings) parsed.settings = buildSeed().settings;
           if (parsed.settings.late_return_penalty_per_hour === undefined) {
@@ -180,6 +184,19 @@ export function upsertCustomer(customer: Customer): Customer {
 export function findCustomerByPhone(phone: string): Customer | undefined {
   const norm = phone.replace(/[\s-]/g, "");
   return loadStore().customers.find((c) => c.phone.replace(/[\s-]/g, "") === norm);
+}
+
+// ---------- Trip positions ----------
+export function addTripPosition(pos: TripPosition): void {
+  updateStore((d) => {
+    d.trip_positions.push(pos);
+  });
+}
+
+export function clearTripPositions(bookingId: string): void {
+  updateStore((d) => {
+    d.trip_positions = d.trip_positions.filter((p) => p.booking_id !== bookingId);
+  });
 }
 
 // ---------- Settings ----------

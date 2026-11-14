@@ -53,6 +53,16 @@ Booking fields include: `driver_id`, `driver_name`, `late_penalty_amount`.
 
 Driver: `{ id, full_name, age, date_of_birth, cnic, phone, licence_no, licence_expiry, address, emergency_contact, status: "available"|"on_trip"|"off_duty", notes, photo, created_at }`
 
+## Tracking (phone-based, no device)
+- `POST /tracking/positions` body `{ booking_code, lat, lng, speed?, recorded_at }` (auth: booking code access, no login required for driver)
+- `GET /tracking/live` → LiveTrip[] (manager auth)
+- `GET /tracking/trips/{booking_id}` → TripPosition[] (manager auth)
+- `POST /tracking/trips/{booking_id}/start` (manager or driver via code)
+- `POST /tracking/trips/{booking_id}/end`
+
+TripPosition: `{ booking_id, booking_code, lat, lng, speed, recorded_at }`
+LiveTrip: `{ booking_id, booking_code, customer_name, car_name, driver_name, status: "live"|"stale"|"ended", last_position, positions }`
+
 ## Demo
 - `POST /demo/reset` (dev only; 404 in production)
 
