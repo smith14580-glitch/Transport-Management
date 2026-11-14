@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --color-charcoal: #151515;
+  --color-charcoal-light: #232323;
+  --color-charcoal-soft: #2e2e2e;
+  --color-brand: #f5b800;
+  --color-brand-dark: #d9a400;
+  --color-brand-light: #fdf0c0;
+  --color-offwhite: #f7f7f5;
+  --color-ink: #333333;
+  --color-stone-line: #e7e5e0;
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-urdu: var(--font-urdu);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #f7f7f5;
+  color: #333333;
+  font-family: var(--font-body), system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+
+[dir="rtl"] body,
+[dir="rtl"] {
+  font-family: var(--font-urdu), var(--font-body), system-ui, sans-serif;
+}
+
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] .font-display {
+  font-family: var(--font-urdu), system-ui, sans-serif;
+  line-height: 1.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
