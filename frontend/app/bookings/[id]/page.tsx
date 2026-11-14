@@ -5,14 +5,17 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, Ban, CheckCircle2, Pencil, Plus, Wallet } from "lucide-react";
 import {
+  assignDriver,
   cancelBooking,
   completeBooking,
   fetchBooking,
   fetchBookingPayments,
+  fetchDrivers,
+  fetchSettings,
   recordPayment,
   updateBooking,
 } from "@/lib/api";
-import type { Booking, Payment } from "@/lib/types";
+import type { Booking, BusinessSettings, Driver, Payment } from "@/lib/types";
 import { formatDate, formatDateTime, formatPKR, todayISO } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import { useLanguage } from "@/lib/i18n";
@@ -40,6 +43,8 @@ export default function BookingDetailPage() {
   const { t } = useLanguage();
   const { canWrite } = useAuth();
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -58,12 +63,15 @@ export default function BookingDetailPage() {
   // edit form
   const [editReturn, setEditReturn] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [reassignId, setReassignId] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const [b, pays] = await Promise.all([fetchBooking(id), fetchBookingPayments(id)]);
+      const [b, pays, drvs, s] = await Promise.all([fetchBooking(id), fetchBookingPayments(id), fetchDrivers(), fetchSettings()]);
       setBooking(b);
       setPayments(pays);
+      setDrivers(drvs);
+      setSettings(s);
       setEditReturn(b.return_datetime.slice(0, 16));
       setEditNotes(b.notes || "");
     } catch (err) {
@@ -92,6 +100,16 @@ export default function BookingDetailPage() {
       return false;
     }
     return true;
+  }
+
+  function lateInfo(b: Booking | null) {
+    if (!b || b.status !== "active") return { late: false, hours: 0, penalty: 0 };
+    // eslint-disable-next-line react-hooks/purity
+    const ms = Date.now() - new Date(b.return_datetime).getTime();
+    if (ms <= 0) return { late: false, hours: 0, penalty: 0 };
+    const hours = Math.ceil(ms / 3600000);
+    const penalty = settings?.late_penalty_enabled ? hours * (settings.late_return_penalty_per_hour || 0) : 0;
+    return { late: true, hours, penalty };
   }
 
   async function submitPayment(e: React.FormEvent) {
@@ -224,8 +242,101 @@ export default function BookingDetailPage() {
             <div><dt className="text-ink/50">{t("total")}</dt><dd className="font-display text-lg font-bold text-charcoal">{formatPKR(booking.total_amount)}</dd></div>
             <div><dt className="text-ink/50">{t("paid")}</dt><dd className="font-semibold text-emerald-700">{formatPKR(booking.amount_paid)}</dd></div>
             <div><dt className="text-ink/50">{t("balance")}</dt><dd className="font-semibold text-red-700">{formatPKR(booking.balance_amount)}</dd></div>
+            {(() => {
+              const info = lateInfo(booking);
+              if (booking.status === "active" && info.late) {
+                return (
+                  <div className="sm:col-span-2">
+                    <dt className="text-ink/50">{t("latePenalty")}</dt>
+                    <dd className="font-semibold text-red-700">
+                      {formatPKR(info.penalty)} — {info.hours} {t("hoursLateSuffix")}
+                    </dd>
+                  </div>
+                );
+              }
+              if (booking.late_penalty_amount && booking.late_penalty_amount > 0) {
+                return (
+                  <div className="sm:col-span-2">
+                    <dt className="text-ink/50">{t("latePenalty")}</dt>
+                    <dd className="font-semibold text-red-700">
+                      {formatPKR(booking.late_penalty_amount)} ({t("completedWithPenalty")})
+                    </dd>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             {booking.notes && <div className="sm:col-span-2"><dt className="text-ink/50">Notes</dt><dd className="font-medium text-charcoal">{booking.notes}</dd></div>}
           </dl>
+
+          {booking.driver_option === "with_driver" && (
+            <div className="space-y-3 border-t border-stone-line pt-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-charcoal">{t("driverAssigned")}:</span>
+                {booking.driver_id ? (
+                  <Link href={`/drivers/${booking.driver_id}`} className="font-semibold text-brand-dark underline">
+                    {booking.driver_name || t("noDriver")}
+                  </Link>
+                ) : (
+                  <span className="text-sm text-ink/60">{t("noDriver")}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={reassignId}
+                  onChange={(e) => setReassignId(e.target.value)}
+                  className={`${inputClass} max-w-xs`}
+                >
+                  <option value="">{t("selectDriver")}</option>
+                  {drivers
+                    .filter((d) => d.status === "available")
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.full_name} · {d.phone}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={!reassignId || !canWrite}
+                  onClick={async () => {
+                    if (!booking || !guardWrite()) return;
+                    try {
+                      await assignDriver(booking.id, reassignId);
+                      setReassignId("");
+                      setNotice("");
+                      await load();
+                    } catch (err) {
+                      setNotice(err instanceof Error ? err.message : "Re-assign nahi ho saka.");
+                    }
+                  }}
+                  className={secondaryButtonClass}
+                >
+                  {t("reassignDriver")}
+                </button>
+                {booking.driver_id && (
+                  <button
+                    type="button"
+                    disabled={!canWrite}
+                    onClick={async () => {
+                      if (!booking || !guardWrite()) return;
+                      try {
+                        await assignDriver(booking.id, null);
+                        setNotice("");
+                        await load();
+                      } catch (err) {
+                        setNotice(err instanceof Error ? err.message : "Remove nahi ho saka.");
+                      }
+                    }}
+                    className={dangerButtonClass}
+                  >
+                    {t("removeDriver")}
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-ink/50">{t("onlyAvailable")}</p>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2 border-t border-stone-line pt-4">
             {booking.balance_amount > 0 && booking.status !== "cancelled" && (

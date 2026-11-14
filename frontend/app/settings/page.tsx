@@ -33,6 +33,8 @@ export default function SettingsPage() {
   const [wdDay, setWdDay] = useState("");
   const [sdHour, setSdHour] = useState("");
   const [sdDay, setSdDay] = useState("");
+  const [penaltyHour, setPenaltyHour] = useState("");
+  const [penaltyEnabled, setPenaltyEnabled] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -46,6 +48,8 @@ export default function SettingsPage() {
       setWdDay(String(s.default_rate_with_driver_day));
       setSdHour(String(s.default_rate_self_hour));
       setSdDay(String(s.default_rate_self_day));
+      setPenaltyHour(String(s.late_return_penalty_per_hour));
+      setPenaltyEnabled(s.late_penalty_enabled);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Settings load nahi ho saki.");
     } finally {
@@ -67,7 +71,8 @@ export default function SettingsPage() {
       return;
     }
     const rates = [wdHour, wdDay, sdHour, sdDay].map((v) => Number(v));
-    if (rates.some((n) => Number.isNaN(n) || n < 0)) {
+    const penaltyNum = Number(penaltyHour);
+    if (rates.some((n) => Number.isNaN(n) || n < 0) || Number.isNaN(penaltyNum) || penaltyNum < 0) {
       setNotice("Rates me sahi number likho (0 ya zyada).");
       return;
     }
@@ -83,6 +88,8 @@ export default function SettingsPage() {
         default_rate_with_driver_day: rates[1],
         default_rate_self_hour: rates[2],
         default_rate_self_day: rates[3],
+        late_return_penalty_per_hour: penaltyNum,
+        late_penalty_enabled: penaltyEnabled,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 4000);
@@ -169,6 +176,23 @@ export default function SettingsPage() {
             <div>
               <label htmlFor="s-sd-hr" className={labelClass}>{t("selfDrive")} — {t("perHour")}</label>
               <input id="s-sd-hr" type="number" min={0} value={sdHour} onChange={(e) => setSdHour(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+        </section>
+
+        {/* Late return penalty */}
+        <section className="space-y-4 rounded-xl bg-white p-5 shadow-sm ring-1 ring-stone-line lg:col-span-2">
+          <h2 className="font-display text-lg font-bold text-charcoal">{t("lateReturn")} — {t("latePenalty")}</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="s-penalty" className={labelClass}>{t("penaltyPerHour")}</label>
+              <input id="s-penalty" type="number" min={0} value={penaltyHour} onChange={(e) => setPenaltyHour(e.target.value)} className={inputClass} />
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-3 text-sm font-semibold text-charcoal">
+                <input type="checkbox" checked={penaltyEnabled} onChange={(e) => setPenaltyEnabled(e.target.checked)} className="h-4 w-4" />
+                {t("penaltyEnabled")}
+              </label>
             </div>
           </div>
         </section>

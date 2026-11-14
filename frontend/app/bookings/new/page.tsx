@@ -8,9 +8,10 @@ import {
   checkAvailability,
   createBooking,
   fetchCars,
+  fetchDrivers,
   fetchSettings,
 } from "@/lib/api";
-import type { BusinessSettings, Car, DurationUnit, PaymentPlan } from "@/lib/types";
+import type { BusinessSettings, Car, Driver, DurationUnit, PaymentPlan } from "@/lib/types";
 import { PAYMENT_PLANS } from "@/lib/types";
 import { formatPKR } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
@@ -51,6 +52,7 @@ export default function NewBookingPage() {
   const { t } = useLanguage();
   const { canWrite } = useAuth();
   const [cars, setCars] = useState<Car[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,15 +64,17 @@ export default function NewBookingPage() {
   const [pickup, setPickup] = useState("");
   const [ret, setRet] = useState("");
   const [driver, setDriver] = useState<"with_driver" | "self_drive">("with_driver");
+  const [driverId, setDriverId] = useState("");
   const [unit, setUnit] = useState<DurationUnit>("days");
   const [plan, setPlan] = useState<PaymentPlan>("full_cash");
   const [advanceOverride, setAdvanceOverride] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    Promise.all([fetchCars(), fetchSettings()])
-      .then(([c, s]) => {
+    Promise.all([fetchCars(), fetchDrivers(), fetchSettings()])
+      .then(([c, d, s]) => {
         setCars(c);
+        setDrivers(d);
         setSettings(s);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Load nahi ho saka."))
@@ -155,6 +159,8 @@ export default function NewBookingPage() {
         pickup_datetime: pickup,
         return_datetime: ret,
         driver_option: driver,
+        driver_id: driver === "with_driver" ? (driverId || null) : null,
+        driver_name: driver === "with_driver" ? (drivers.find((d) => d.id === driverId)?.full_name || null) : null,
         duration_value: durationValue,
         duration_unit: unit,
         rate_per_unit: rate,
@@ -245,7 +251,7 @@ export default function NewBookingPage() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => { setDriver("with_driver"); setAdvanceOverride(null); }}
+                onClick={() => { setDriver("with_driver"); setDriverId(""); setAdvanceOverride(null); }}
                 className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold ring-1 ${
                   driver === "with_driver" ? "bg-charcoal text-white ring-charcoal" : "bg-white text-charcoal ring-stone-line"
                 }`}
@@ -267,6 +273,31 @@ export default function NewBookingPage() {
               </button>
             </div>
           </div>
+
+          {/* Driver assignment */}
+          {driver === "with_driver" && (
+            <div>
+              <label htmlFor="driverSel" className={labelClass}>
+                {t("driverAssigned")} *
+              </label>
+              <select
+                id="driverSel"
+                value={driverId}
+                onChange={(e) => setDriverId(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">{t("selectDriver")}</option>
+                {drivers
+                  .filter((d) => d.status === "available")
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name} · {d.phone}
+                    </option>
+                  ))}
+              </select>
+              <p className="mt-1.5 text-xs text-ink/50">{t("onlyAvailable")}</p>
+            </div>
+          )}
 
           {/* Duration unit */}
           <div>

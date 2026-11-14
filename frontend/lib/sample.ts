@@ -10,6 +10,7 @@ import type {
   BusinessSettings,
   Car,
   Customer,
+  Driver,
   Payment,
   SaleRecord,
   StoreData,
@@ -35,6 +36,8 @@ export function buildSeed(): StoreData {
     default_rate_with_driver_day: 15000,
     default_rate_self_hour: 1500,
     default_rate_self_day: 10000,
+    late_return_penalty_per_hour: 1000,
+    late_penalty_enabled: true,
   };
 
   const cars: Car[] = [
@@ -62,6 +65,14 @@ export function buildSeed(): StoreData {
     { id: "cus-10", full_name: sampleName("Adil Khan"), phone: "0308-9900112", address: "Shadman Town, Karachi", created_at: addDaysISO(-15) },
   ];
 
+  const drivers: Driver[] = [
+    { id: "drv-1", full_name: "Kamran Ali (Sample)", age: 34, date_of_birth: "1990-05-12", cnic: "42101-1234567-1", phone: "0300-1234567", licence_no: "KHI-12345", licence_expiry: addDaysISO(180), address: "Gulshan, Karachi", emergency_contact: "0300-9998877", status: "on_trip", notes: "Sample driver", photo: null, created_at: addDaysISO(-60) },
+    { id: "drv-2", full_name: "Imtiaz Hussain (Sample)", age: 41, date_of_birth: "1983-09-03", cnic: "42201-7654321-2", phone: "0321-7654321", licence_no: "KHI-67890", licence_expiry: addDaysISO(20), address: "Korangi, Karachi", emergency_contact: "0321-1112233", status: "available", notes: "Licence expiring soon (sample)", photo: null, created_at: addDaysISO(-45) },
+    { id: "drv-3", full_name: "Nadeem Raza (Sample)", age: 29, date_of_birth: "1995-11-20", cnic: "42301-1122334-3", phone: "0333-1122334", licence_no: "KHI-11223", licence_expiry: addDaysISO(365), address: "Malir, Karachi", emergency_contact: "0333-4455667", status: "available", notes: "Sample driver", photo: null, created_at: addDaysISO(-30) },
+    { id: "drv-4", full_name: "Salman Qureshi (Sample)", age: 37, date_of_birth: "1987-02-14", cnic: "42401-9988776-4", phone: "0345-9988776", licence_no: "KHI-99887", licence_expiry: addDaysISO(90), address: "Defence, Karachi", emergency_contact: "0345-2233445", status: "off_duty", notes: "On leave (sample)", photo: null, created_at: addDaysISO(-20) },
+    { id: "drv-5", full_name: "Tariq Mehmood (Sample)", age: 46, date_of_birth: "1978-07-08", cnic: "42501-5566778-5", phone: "0312-5566778", licence_no: "KHI-55667", licence_expiry: addDaysISO(200), address: "PECHS, Karachi", emergency_contact: "0312-3344556", status: "available", notes: "Sample driver", photo: null, created_at: addDaysISO(-10) },
+  ];
+
   const bookings: Booking[] = [
     {
       id: "bk-1", booking_code: "HK-2026-0001", customer_id: "cus-1",
@@ -71,13 +82,13 @@ export function buildSeed(): StoreData {
       driver_option: "with_driver", duration_value: 1, duration_unit: "days",
       rate_per_unit: 30000, total_amount: 30000, advance_amount: 15000, amount_paid: 15000,
       balance_amount: 15000, payment_plan: "half_now_half_later", payment_status: "partial",
-      status: "active", notes: "Wedding guest pickup — airport run", created_at: addDaysISO(-1),
+      status: "active", driver_id: "drv-1", driver_name: "Kamran Ali (Sample)", notes: "Wedding guest pickup — airport run", created_at: addDaysISO(-1),
     },
     {
       id: "bk-2", booking_code: "HK-2026-0002", customer_id: "cus-2",
       customer_name: sampleName("Bilal Hussain"), customer_phone: "0321-4455667",
       car_id: "car-2", car_name: "Toyota Hilux Revo 4x4",
-      pickup_datetime: atTimeISO(addDaysISO(-1), "10:00"), return_datetime: atTimeISO(today, "18:00"),
+      pickup_datetime: atTimeISO(addDaysISO(-1), "10:00"), return_datetime: atTimeISO(addDaysISO(-1), "18:00"),
       driver_option: "self_drive", duration_value: 2, duration_unit: "days",
       rate_per_unit: 15000, total_amount: 30000, advance_amount: 10000, amount_paid: 30000,
       balance_amount: 0, payment_plan: "full_cash", payment_status: "paid",
@@ -213,13 +224,14 @@ export function buildSeed(): StoreData {
   ];
 
   return {
-    version: 1,
+    version: 2,
     seeded_at: today,
     cars,
     bookings,
     payments,
     sales,
     customers,
+    drivers,
     settings,
   };
 }

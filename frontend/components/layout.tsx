@@ -8,6 +8,7 @@ import {
   Car,
   CarFront,
   History,
+  IdCard,
   LayoutDashboard,
   LogIn,
   LogOut,
@@ -36,6 +37,7 @@ const NAV: NavItem[] = [
   { href: "/records/rent", labelKey: "rentRecords", icon: <History className="h-5 w-5" /> },
   { href: "/records/sales", labelKey: "salesRecords", icon: <ShoppingBag className="h-5 w-5" /> },
   { href: "/customers", labelKey: "customers", icon: <Users className="h-5 w-5" /> },
+  { href: "/drivers", labelKey: "drivers", icon: <IdCard className="h-5 w-5" /> },
   { href: "/settings", labelKey: "settings", icon: <Settings className="h-5 w-5" /> },
 ];
 

@@ -8,6 +8,7 @@ import type {
   BusinessSettings,
   Car,
   Customer,
+  Driver,
   Payment,
   SaleRecord,
   StoreData,
@@ -28,7 +29,18 @@ export function loadStore(): StoreData {
       const raw = window.localStorage.getItem(STORE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as StoreData;
-        if (parsed && parsed.version === 1 && Array.isArray(parsed.cars)) {
+        if (parsed && Array.isArray(parsed.cars)) {
+          if (!Array.isArray(parsed.drivers)) {
+            parsed.drivers = buildSeed().drivers;
+          }
+          if (!parsed.settings) parsed.settings = buildSeed().settings;
+          if (parsed.settings.late_return_penalty_per_hour === undefined) {
+            parsed.settings.late_return_penalty_per_hour = 1000;
+          }
+          if (parsed.settings.late_penalty_enabled === undefined) {
+            parsed.settings.late_penalty_enabled = true;
+          }
+          parsed.version = 2;
           memoryStore = parsed;
           return parsed;
         }
@@ -133,6 +145,26 @@ export function upsertSale(record: SaleRecord): SaleRecord {
     else d.sales.push(record);
   });
   return record;
+}
+
+// ---------- Drivers ----------
+export function upsertDriver(driver: Driver): Driver {
+  updateStore((d) => {
+    const i = d.drivers.findIndex((x) => x.id === driver.id);
+    if (i >= 0) d.drivers[i] = driver;
+    else d.drivers.push(driver);
+  });
+  return driver;
+}
+
+export function deleteDriver(id: string): void {
+  updateStore((d) => {
+    d.drivers = d.drivers.filter((x) => x.id !== id);
+  });
+}
+
+export function findDriver(id: string): Driver | undefined {
+  return loadStore().drivers.find((x) => x.id === id);
 }
 
 // ---------- Customers ----------

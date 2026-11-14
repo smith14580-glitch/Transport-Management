@@ -17,6 +17,7 @@ export type PaymentMethod = "cash" | "bank" | "split";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 export type SaleType = "sale" | "purchase";
 export type SaleStatus = "completed" | "pending";
+export type DriverStatus = "available" | "on_trip" | "off_duty";
 
 export interface User {
   id: string;
@@ -65,6 +66,9 @@ export interface Booking {
   payment_plan: PaymentPlan;
   payment_status: PaymentStatus;
   status: BookingStatus;
+  driver_id?: string | null;
+  driver_name?: string | null;
+  late_penalty_amount?: number;
   notes?: string | null;
   created_at?: string;
 }
@@ -111,6 +115,23 @@ export interface Customer {
   created_at?: string;
 }
 
+export interface Driver {
+  id: string;
+  full_name: string;
+  age: number;
+  date_of_birth: string;
+  cnic: string;
+  phone: string;
+  licence_no: string;
+  licence_expiry: string;
+  address?: string | null;
+  emergency_contact?: string | null;
+  status: DriverStatus;
+  notes?: string | null;
+  photo?: string | null;
+  created_at?: string;
+}
+
 export interface CustomerSummary {
   customer_id: string;
   full_name: string;
@@ -131,6 +152,8 @@ export interface BusinessSettings {
   default_rate_with_driver_day: number;
   default_rate_self_hour: number;
   default_rate_self_day: number;
+  late_return_penalty_per_hour: number;
+  late_penalty_enabled: boolean;
 }
 
 export interface DashboardSummary {
@@ -158,6 +181,7 @@ export interface StoreData {
   payments: Payment[];
   sales: SaleRecord[];
   customers: Customer[];
+  drivers: Driver[];
   settings: BusinessSettings;
 }
 

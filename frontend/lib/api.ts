@@ -16,6 +16,7 @@ import type {
   Customer,
   CustomerSummary,
   DashboardSummary,
+  Driver,
   Payment,
   PaymentMethod,
   SaleRecord,
@@ -34,6 +35,8 @@ import {
   upsertBooking,
   upsertCar,
   upsertCustomer,
+  deleteDriver as storeDeleteDriver,
+  upsertDriver,
   upsertSale,
 } from "./store";
 
@@ -303,6 +306,8 @@ export interface CreateBookingInput {
   total_amount: number;
   advance_amount: number;
   payment_plan: Booking["payment_plan"];
+  driver_id?: string | null;
+  driver_name?: string | null;
   notes?: string;
 }
 
@@ -344,13 +349,23 @@ export async function createBooking(body: CreateBookingInput): Promise<Booking> 
       amount_paid: body.advance_amount,
       balance_amount: Math.max(0, body.total_amount - body.advance_amount),
       payment_plan: body.payment_plan,
-      payment_status:
-        body.advance_amount >= body.total_amount ? "paid" : body.advance_amount > 0 ? "partial" : "unpaid",
-      status: body.pickup_datetime.slice(0, 10) <= todayISO() ? "active" : "upcoming",
-      notes: body.notes || null,
-      created_at: todayISO(),
-    };
+       payment_status:
+         body.advance_amount >= body.total_amount ? "paid" : body.advance_amount > 0 ? "partial" : "unpaid",
+       status: body.pickup_datetime.slice(0, 10) <= todayISO() ? "active" : "upcoming",
+       driver_id: body.driver_id || null,
+       driver_name: body.driver_name || null,
+       late_penalty_amount: 0,
+       notes: body.notes || null,
+       created_at: todayISO(),
+     };
     upsertBooking(booking);
+    if (body.driver_id) {
+      const drv = loadStore().drivers.find((d) => d.id === body.driver_id);
+      if (drv) {
+        drv.status = "on_trip";
+        upsertDriver(drv);
+      }
+    }
     if (body.advance_amount > 0) {
       addPaymentRecord({
         id: `pay-${Date.now()}`,
@@ -380,6 +395,16 @@ export async function updateBooking(id: string, body: Partial<Booking>): Promise
     const next = { ...b, ...body } as Booking;
     next.balance_amount = Math.max(0, next.total_amount - next.amount_paid);
     next.payment_status = next.balance_amount === 0 ? "paid" : next.amount_paid > 0 ? "partial" : "unpaid";
+    if (body.driver_id !== undefined && body.driver_id !== b.driver_id) {
+      if (b.driver_id) {
+        const old = loadStore().drivers.find((d) => d.id === b.driver_id);
+        if (old) { old.status = "available"; upsertDriver(old); }
+      }
+      if (body.driver_id) {
+        const nw = loadStore().drivers.find((d) => d.id === body.driver_id);
+        if (nw) { nw.status = "on_trip"; upsertDriver(nw); }
+      }
+    }
     upsertBooking(next);
     return demo(next);
   }
@@ -390,6 +415,10 @@ export async function cancelBooking(id: string, reason?: string): Promise<Bookin
   if (USE_DEMO_DATA) {
     const b = loadStore().bookings.find((x) => x.id === id);
     if (!b) throw new ApiError(404, "NOT_FOUND", "Booking nahi mili.");
+    if (b.driver_id) {
+      const drv = loadStore().drivers.find((d) => d.id === b.driver_id);
+      if (drv) { drv.status = "available"; upsertDriver(drv); }
+    }
     const next = { ...b, status: "cancelled" as const, notes: reason ? `${b.notes || ""} [Cancelled: ${reason}]`.trim() : b.notes };
     upsertBooking(next);
     return demo(next);
@@ -401,7 +430,29 @@ export async function completeBooking(id: string): Promise<Booking> {
   if (USE_DEMO_DATA) {
     const b = loadStore().bookings.find((x) => x.id === id);
     if (!b) throw new ApiError(404, "NOT_FOUND", "Booking nahi mili.");
+    if (b.driver_id) {
+      const drv = loadStore().drivers.find((d) => d.id === b.driver_id);
+      if (drv) { drv.status = "available"; upsertDriver(drv); }
+    }
+    const s = loadStore().settings;
+    const now = new Date();
+    const ret = new Date(b.return_datetime);
+    const msLate = now.getTime() - ret.getTime();
+    let penalty = 0;
+    if (s.late_penalty_enabled && msLate > 0) {
+      const hoursLate = Math.ceil(msLate / 3600000);
+      penalty = hoursLate * (s.late_return_penalty_per_hour || 0);
+    }
     const next = { ...b, status: "completed" as const };
+    if (penalty > 0) {
+      next.late_penalty_amount = penalty;
+      next.balance_amount = Math.max(0, next.balance_amount + penalty);
+      next.payment_status = next.balance_amount === 0 ? "paid" : next.amount_paid > 0 ? "partial" : "unpaid";
+      const note = `Late penalty: PKR ${penalty} (${Math.ceil(msLate / 3600000)} hours late)`;
+      next.notes = next.notes ? `${next.notes} · ${note}` : note;
+    } else {
+      next.late_penalty_amount = 0;
+    }
     upsertBooking(next);
     return demo(next);
   }
@@ -481,6 +532,94 @@ export async function deleteCar(id: string): Promise<void> {
     return demo(undefined);
   }
   await apiFetch(`/cars/${id}`, { method: "DELETE" });
+}
+
+// ---------- Drivers ----------
+export async function fetchDrivers(): Promise<Driver[]> {
+  if (USE_DEMO_DATA) return demo([...loadStore().drivers]);
+  return asArray<Driver>(await apiFetch<unknown>("/drivers"));
+}
+
+export async function fetchDriver(id: string): Promise<Driver> {
+  if (USE_DEMO_DATA) {
+    const d = loadStore().drivers.find((x) => x.id === id);
+    if (!d) throw new ApiError(404, "NOT_FOUND", "Driver nahi mila.");
+    return demo(d);
+  }
+  return apiFetch<Driver>(`/drivers/${id}`);
+}
+
+export async function createDriver(body: Omit<Driver, "id">): Promise<Driver> {
+  if (USE_DEMO_DATA) {
+    const driver: Driver = { ...body, id: `drv-${Date.now()}`, created_at: todayISO() };
+    upsertDriver(driver);
+    return demo(driver);
+  }
+  return apiFetch<Driver>("/drivers", { method: "POST", body });
+}
+
+export async function updateDriver(id: string, body: Partial<Driver>): Promise<Driver> {
+  if (USE_DEMO_DATA) {
+    const d = loadStore().drivers.find((x) => x.id === id);
+    if (!d) throw new ApiError(404, "NOT_FOUND", "Driver nahi mila.");
+    const next = { ...d, ...body } as Driver;
+    upsertDriver(next);
+    return demo(next);
+  }
+  return apiFetch<Driver>(`/drivers/${id}`, { method: "PATCH", body });
+}
+
+export async function deleteDriver(id: string): Promise<void> {
+  if (USE_DEMO_DATA) {
+    const d = loadStore().drivers.find((x) => x.id === id);
+    if (!d) throw new ApiError(404, "NOT_FOUND", "Driver nahi mila.");
+    if (d.status === "on_trip") {
+      throw new ApiError(400, "DRIVER_ON_TRIP", "Driver is currently on a trip and cannot be deleted.");
+    }
+    storeDeleteDriver(id);
+    return demo(undefined);
+  }
+  await apiFetch(`/drivers/${id}`, { method: "DELETE" });
+}
+
+export async function fetchDriverTrips(driverId: string): Promise<Booking[]> {
+  if (USE_DEMO_DATA) {
+    return demo(loadStore().bookings.filter((b) => b.driver_id === driverId));
+  }
+  return asArray<Booking>(await apiFetch<unknown>(`/drivers/${driverId}/trips`));
+}
+
+export async function assignDriver(bookingId: string, driverId: string | null): Promise<Booking> {
+  if (USE_DEMO_DATA) {
+    const booking = loadStore().bookings.find((b) => b.id === bookingId);
+    if (!booking) throw new ApiError(404, "NOT_FOUND", "Booking nahi mili.");
+    if (booking.driver_id && booking.driver_id !== driverId) {
+      const old = loadStore().drivers.find((d) => d.id === booking.driver_id);
+      if (old) { old.status = "available"; upsertDriver(old); }
+    }
+    if (driverId) {
+      const drv = loadStore().drivers.find((d) => d.id === driverId);
+      if (!drv) throw new ApiError(404, "NOT_FOUND", "Driver nahi mila.");
+      if (drv.status !== "available") {
+        throw new ApiError(400, "DRIVER_NOT_AVAILABLE", "Sirf available drivers assign ho sakte hain.");
+      }
+      drv.status = "on_trip";
+      upsertDriver(drv);
+      booking.driver_id = driverId;
+      booking.driver_name = drv.full_name;
+      booking.driver_option = "with_driver";
+    } else {
+      booking.driver_id = null;
+      booking.driver_name = null;
+      booking.driver_option = "self_drive";
+    }
+    upsertBooking(booking);
+    return demo(booking);
+  }
+  return apiFetch<Booking>(`/bookings/${bookingId}/assign-driver`, {
+    method: "POST",
+    body: { driver_id: driverId },
+  });
 }
 
 // ---------- Payments ----------
